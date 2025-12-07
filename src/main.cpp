@@ -3,27 +3,17 @@
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
-const char* ssid     = "ASDF1234";
-const char* password = "1234567890";
-const char* otaHostname = "esp32-train";  // mDNS name: esp32-train.local
-const char* otaPassword = nullptr;        // optional; set to nullptr if you don't want a password
-
-
-
 constexpr uint8_t LED_PIN = 4;
-constexpr uint8_t LED_PIN2 = 2;
-
 constexpr uint16_t NUM_LEDS = 800;
-constexpr uint16_t NUM_LEDS2 = 222;
 
 CRGB leds[NUM_LEDS];
-CRGB leds2[NUM_LEDS2];
 
 const uint8_t NUM_CARS = 7;
 const uint16_t START_OFFSET = 0;
+
 // initial speed (ms between frames). We'll copy this into a mutable variable so a pot can control it.
-const uint16_t TRAIN_SPEED = 220; // default speed (ms between frames)
-const uint8_t  TRAIN_VOLUME = 18; // Volume level for DFPlayer Mini (0-30)
+const uint16_t TRAIN_SPEED = 220;  // default speed (ms between frames)
+const uint8_t  TRAIN_VOLUME = 10;  // Volume level for DFPlayer Mini (0-30)
 
 //DFRobot DFPlayer Mini setup
 // We'll use UART2 (index 2). You can use 1 for UART1 if you prefer.
@@ -33,14 +23,17 @@ constexpr int RX_PIN = 16;  // GPIO16 (safe for RX)
 constexpr int TX_PIN = 17;  // GPIO17 (safe for TX)
 constexpr unsigned long BAUD = 9600;
 DFRobotDFPlayerMini myDFPlayer;
-// Potentiometer pin (ADC1) - using GPIO33 because GPIO36 not present on this board
-constexpr int POT_PIN = 33; // ADC1_CH5
-constexpr int POT_READ_INTERVAL = 250; // ms between pot reads
+// Potentiometer pins (ADC1) - using GPIO34/35 (far from UART2 on GPIO16/17) to minimize interference
+constexpr int VOLUME_POT_PIN = 34; // ADC1_CH6 (GPIO34) - far from UART2, less noisy
+// NOTE: Two 10k pots in parallel on the same 3.3V rail create loading that limits ADC range to ~0–450.
+// SOLUTION: Add a 10–100 nF capacitor from wiper to GND (reduces noise) and map 0–450 instead of 0–4095.
+// FUTURE: Upgrade to 100k pots to eliminate parallel loading, then change mapping back to 0–4095.
+constexpr int VOLUME_POT_READ_INTERVAL = 250; // ms between pot reads
 constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
-constexpr int SPEED_POT_PIN = 32; // ADC1_CH4 (GPIO32)
+constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 50;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 100;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
 void setup() {
@@ -48,7 +41,6 @@ void setup() {
   Serial.begin(9600);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-  FastLED.addLeds<WS2812B, LED_PIN2, GRB>(leds2, NUM_LEDS2);
 
   // Initialize DFPlayer Mini
   ExtSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN ); // Initialize Serial for debug output
@@ -67,24 +59,64 @@ void setup() {
   }
   Serial.println(F("DFPlayer Mini online."));
 
-  myDFPlayer.volume(TRAIN_VOLUME);  //Set volume value. From 0 to 30
+  /*
+  */
   // configure ADC pin
   analogReadResolution(12); // 12-bit ADC (0-4095)
   // Ensure full-scale range up to 3.3V on the ADC pin
-  analogSetPinAttenuation(POT_PIN, ADC_11db);
+  analogSetPinAttenuation(VOLUME_POT_PIN, ADC_11db);
   // Configure attenuation for the speed pot as well
   analogSetPinAttenuation(SPEED_POT_PIN, ADC_11db);
   Serial.println(F("ADC configured: 12-bit resolution, 11dB attenuation"));
   // nothing else required for ADC1 pins on ESP32
+
+  myDFPlayer.volume(TRAIN_VOLUME);  //Set volume value (0~30).
+  /*  
   myDFPlayer.play(11);  //Play the first mp3 - Merry Christmas
   Serial.println(F("Playing Merry Christmas"));
   delay(5000);
+  */
 }
 
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  static uint32_t lastPotRead = 0;
+  static uint8_t currentVolume = TRAIN_VOLUME;
+  static uint32_t lastSpeedRead = 0;
+  static int trainSpeedMs = TRAIN_SPEED; // mutable copy controlled by pot
 
+  // Read potentiometer periodically and map to volume 0-30
+  uint32_t now = millis();
+  if (!lastPotRead || (now - lastPotRead >= VOLUME_POT_READ_INTERVAL)) {
+    lastPotRead = now;
+    int raw = analogRead(VOLUME_POT_PIN); // 0..4095
+  // map to 0..30 (12-bit ADC range is 0..4095)
+  uint8_t vol = map(raw, 0, 4095, 0, 30);
+    if (vol > 30) vol = 30;
+    if (vol < 0) vol = 0;
+    if (vol + VOLUME_HYST < currentVolume || vol > currentVolume + VOLUME_HYST) {
+      currentVolume = vol;
+      myDFPlayer.volume(currentVolume);
+      Serial.print(F("Raw ADC: "));
+      Serial.print(raw);
+      Serial.print(F(" -> Mapped volume: "));
+      Serial.println(currentVolume);
+    }
+  }
+
+  if (now - lastSpeedRead >= VOLUME_POT_READ_INTERVAL) {
+    lastSpeedRead = now;
+    int raw2 = analogRead(SPEED_POT_PIN);
+    int mapped = map(raw2, 0, 4095, SPEED_MIN_MS, SPEED_MAX_MS);
+    if (abs(mapped - trainSpeedMs) > SPEED_HYST) {
+      trainSpeedMs = mapped;
+      Serial.print(F("Raw speed ADC: "));
+      Serial.print(raw2);
+      Serial.print(F(" -> trainSpeedMs: "));
+      Serial.println(trainSpeedMs);
+    }
+  }
+ 
   static uint16_t i = START_OFFSET;
 
   // Clear all LEDs 
@@ -96,10 +128,6 @@ void loop() {
   static bool waitingForStart = false; // we've requested play, waiting for readState to indicate it's started
   static bool isPlaying = false;       // currently playing
   // pot reading state
-  static uint32_t lastPotRead = 0;
-  static uint8_t currentVolume = TRAIN_VOLUME;
-  static uint32_t lastSpeedRead = 0;
-  static int trainSpeedMs = TRAIN_SPEED; // mutable copy controlled by pot
 
   if(i == START_OFFSET) {
     FastLED.show(); // Update LEDs to show cleared state
@@ -157,39 +185,7 @@ void loop() {
   FastLED.show();
   delay(trainSpeedMs);
 
-  // Read potentiometer periodically and map to volume 0-30
-  uint32_t now = millis();
-  if (now - lastPotRead >= POT_READ_INTERVAL) {
-    lastPotRead = now;
-    int raw = analogRead(POT_PIN); // 0..4095
-  // map to 0..30 (12-bit ADC range is 0..4095)
-  uint8_t vol = map(raw, 0, 450, 0, 30);
-    if (vol > 30) vol = 30;
-    if (vol < 0) vol = 0;
-    if (vol + VOLUME_HYST < currentVolume || vol > currentVolume + VOLUME_HYST) {
-      currentVolume = vol;
-      myDFPlayer.volume(currentVolume);
-      Serial.print(F("Raw ADC: "));
-      Serial.print(raw);
-      Serial.print(F(" -> Mapped volume: "));
-      Serial.println(currentVolume);
-    }
-  }
-
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             // Read speed pot periodically and map to SPEED_MIN_MS..SPEED_MAX_MS
-  if (now - lastSpeedRead >= POT_READ_INTERVAL) {
-    lastSpeedRead = now;
-    int raw2 = analogRead(SPEED_POT_PIN);
-    int mapped = map(raw2, 0, 450, SPEED_MIN_MS, SPEED_MAX_MS);
-    if (abs(mapped - trainSpeedMs) > SPEED_HYST) {
-      trainSpeedMs = mapped;
-      Serial.print(F("Raw speed ADC: "));
-      Serial.print(raw2);
-      Serial.print(F(" -> trainSpeedMs: "));
-      Serial.println(trainSpeedMs);
-    }
-  }
-
+  
 
   if(i == NUM_LEDS-2) {
     //myDFPlayer.stop();
