@@ -3,8 +3,8 @@
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
-const char* ssid     = "ApexMicro";
-const char* password = "1020304050";
+const char* ssid     = "ASDF1234";
+const char* password = "1234567890";
 const char* otaHostname = "esp32-train";  // mDNS name: esp32-train.local
 const char* otaPassword = nullptr;        // optional; set to nullptr if you don't want a password
 
