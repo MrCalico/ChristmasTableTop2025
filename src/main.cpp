@@ -5,12 +5,12 @@
 
 
 
-const uint8_t NUM_CARS = 10;
+const uint8_t NUM_CARS = 11;  // number of train cars (not including locomotive and caboose) Odd # for green before cabose.
 const uint16_t START_OFFSET = 0;
 
 // initial speed (ms between frames). We'll copy this into a mutable variable so a pot can control it.
 const uint16_t TRAIN_SPEED = 220;  // default speed (ms between frames)
-const uint8_t  TRAIN_VOLUME = 10;  // Volume level for DFPlayer Mini (0-30)
+const uint8_t  TRAIN_VOLUME = 20;  // Volume level for DFPlayer Mini (0-30)
 
 //DFRobot DFPlayer Mini setup
 // We'll use UART2 (index 2). You can use 1 for UART1 if you prefer.
@@ -73,6 +73,9 @@ void setup() {
   // nothing else required for ADC1 pins on ESP32
 
   myDFPlayer.volume(TRAIN_VOLUME);  //Set volume value (0~30).
+  // Play an initial sound on startup (uncomment or change track as desired)
+  myDFPlayer.play(11);  // play track 11 on the SD card
+  Serial.println(F("Playing initial track"));
   /*  
   myDFPlayer.play(11);  //Play the first mp3 - Merry Christmas
   Serial.println(F("Playing Merry Christmas"));
@@ -128,7 +131,7 @@ void loop() {
   // Simple train: one white headlight ahead + multi-LED red locomotive + trailing cars
   const uint8_t LOCO_REDS = 5; // number of red LEDs for the locomotive body
   if (i + 1 < NUM_LEDS) {
-    leds[i + 1] = CRGB(100, 100, 100);  // white headlight ahead
+    leds[i + 1] = CRGB(150, 150, 150);  // white headlight ahead
   }
 
   // Draw locomotive body as LOCO_REDS red LEDs behind the headlight
@@ -148,8 +151,8 @@ void loop() {
 
   // Then add a dedicated caboose after the cars
   uint16_t caboseStart = LOCO_REDS + (NUM_CARS * 4) + 1;
-  if (i > caboseStart)     leds[i - caboseStart - 1] = CRGB(255, 165, 0);
-  if (i > caboseStart + 1) leds[i - caboseStart - 2] = CRGB(200, 165, 0);
+  if (i > caboseStart)     leds[i - caboseStart - 1] = CRGB(255, 0, 0);
+  if (i > caboseStart + 1) leds[i - caboseStart - 2] = CRGB(200, 0, 0);
   if (i > caboseStart + 2) leds[i - caboseStart - 3] = CRGB(100, 80, 0);
 
   FastLED.show();
