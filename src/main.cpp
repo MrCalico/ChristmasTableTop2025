@@ -125,11 +125,27 @@ void loop() {
   // Clear all LEDs 
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 
-  // Simple train: white headlight 2 positions ahead, red body at current position
+  // Simple train: white headlight ahead + red locomotive + trailing cars
   if (i + 1 < NUM_LEDS) {
     leds[i + 1] = CRGB(100, 100, 100);  // white headlight ahead
   }
-  leds[i] = CRGB(200, 0, 0);  // red body at head position
+  leds[i] = CRGB::Red;  // red locomotive head
+
+  // Draw trailing cars (4 LEDs each, alternating green and red)
+  for (uint8_t car = 0; car < NUM_CARS; car++) {
+    uint8_t offset = car * 4;  // Each car starts 4 LEDs back
+    CRGB color = (car % 2 == 0) ? CRGB(0, 200, 0) : CRGB(200, 0, 0);  // green, red, green, red...
+    if (i > offset)     leds[i - offset - 1] = color;
+    if (i > offset + 1) leds[i - offset - 2] = CRGB(color.r * 0.75, color.g * 0.75, color.b * 0.75);  // 75% brightness
+    if (i > offset + 2) leds[i - offset - 3] = CRGB(color.r * 0.5, color.g * 0.5, color.b * 0.5);   // 50% brightness
+    if (i > offset + 3) leds[i - offset - 4] = CRGB(color.r * 0.25, color.g * 0.25, color.b * 0.25); // 25% brightness (tail light)
+  }
+
+  // Then add a dedicated caboose after
+  uint16_t caboseStart = (NUM_CARS * 4) + 1;
+  if (i > caboseStart)     leds[i - caboseStart - 1] = CRGB(255, 165, 0);
+  if (i > caboseStart + 1) leds[i - caboseStart - 2] = CRGB(200, 165, 0);
+  if (i > caboseStart + 2) leds[i - caboseStart - 3] = CRGB(100, 80, 0);
 
   FastLED.show();
   delay(trainSpeedMs);
