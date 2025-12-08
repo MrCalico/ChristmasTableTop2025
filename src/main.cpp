@@ -74,13 +74,9 @@ void setup() {
 
   myDFPlayer.volume(TRAIN_VOLUME);  //Set volume value (0~30).
   // Play an initial sound on startup (uncomment or change track as desired)
-  myDFPlayer.play(11);  // play track 11 on the SD card
+  myDFPlayer.play(11);  // play track 11 on the SD card - Ho Ho Ho Merry Christmas
   Serial.println(F("Playing initial track"));
-  /*  
-  myDFPlayer.play(11);  //Play the first mp3 - Merry Christmas
-  Serial.println(F("Playing Merry Christmas"));
-  delay(5000);
-  */
+
 }
 
 
