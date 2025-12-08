@@ -30,7 +30,7 @@ constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
 constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 90;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 0;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
 constexpr uint8_t LED_PIN = 4;
@@ -125,15 +125,20 @@ void loop() {
   // Clear all LEDs 
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 
-  // Simple train: white headlight ahead + red locomotive + trailing cars
+  // Simple train: one white headlight ahead + multi-LED red locomotive + trailing cars
+  const uint8_t LOCO_REDS = 5; // number of red LEDs for the locomotive body
   if (i + 1 < NUM_LEDS) {
     leds[i + 1] = CRGB(100, 100, 100);  // white headlight ahead
   }
-  leds[i] = CRGB::Red;  // red locomotive head
 
-  // Draw trailing cars (4 LEDs each, alternating green and red)
+  // Draw locomotive body as LOCO_REDS red LEDs behind the headlight
+  for (uint8_t r = 0; r < LOCO_REDS; r++) {
+    if (i >= r) leds[i - r] = CRGB::Red;
+  }
+
+  // Draw trailing cars (4 LEDs each, alternating green and red), starting after the locomotive
   for (uint8_t car = 0; car < NUM_CARS; car++) {
-    uint8_t offset = car * 4;  // Each car starts 4 LEDs back
+    uint16_t offset = LOCO_REDS + (car * 4);  // Each car starts after the locomotive
     CRGB color = (car % 2 == 0) ? CRGB(0, 200, 0) : CRGB(200, 0, 0);  // green, red, green, red...
     if (i > offset)     leds[i - offset - 1] = color;
     if (i > offset + 1) leds[i - offset - 2] = CRGB(color.r * 0.75, color.g * 0.75, color.b * 0.75);  // 75% brightness
@@ -141,8 +146,8 @@ void loop() {
     if (i > offset + 3) leds[i - offset - 4] = CRGB(color.r * 0.25, color.g * 0.25, color.b * 0.25); // 25% brightness (tail light)
   }
 
-  // Then add a dedicated caboose after
-  uint16_t caboseStart = (NUM_CARS * 4) + 1;
+  // Then add a dedicated caboose after the cars
+  uint16_t caboseStart = LOCO_REDS + (NUM_CARS * 4) + 1;
   if (i > caboseStart)     leds[i - caboseStart - 1] = CRGB(255, 165, 0);
   if (i > caboseStart + 1) leds[i - caboseStart - 2] = CRGB(200, 165, 0);
   if (i > caboseStart + 2) leds[i - caboseStart - 3] = CRGB(100, 80, 0);
