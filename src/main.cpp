@@ -181,15 +181,17 @@ void loop() {
   static uint16_t headPos = 0;
 
   if (!spriteBuilt) {
-    // sprite layout: head + (NUM_CARS * (4 car LEDs + 1 gap)) + 3 caboose LEDs
-    spriteLen = 4 + NUM_CARS * 5;
+    // sprite layout: head (2 LEDs) + (NUM_CARS * (4 car LEDs + 1 gap)) + 3 caboose LEDs
+    spriteLen = 5 + NUM_CARS * 5; // head extended by 1
     sprite = new CRGB[spriteLen];
     // clear
     for (uint16_t s = 0; s < spriteLen; ++s) sprite[s] = CRGB::Black;
     // head
     sprite[0] = CRGB(100, 100, 100);
+    // extra locomotive LED (red part of the locomotive)
+    if (spriteLen > 1) sprite[1] = CRGB(200, 0, 0);
     // cars
-    uint16_t p = 1;
+    uint16_t p = 2; // start after 2-head LEDs
     for (uint8_t car = 0; car < NUM_CARS && p + 3 < spriteLen; ++car) {
       if (car % 2 == 0) {
         sprite[p] = CRGB(200, 0, 0);
@@ -208,7 +210,7 @@ void loop() {
     if (p + 2 < spriteLen) {
       sprite[p] = CRGB(200, 0, 0);
       sprite[p + 1] = CRGB(150, 0, 0);
-      sprite[p + 2] = CRGB(100, 0, 0);
+      sprite[p + 2] = CRGB(15, 5, 0);
     }
     spriteBuilt = true;
   }
@@ -232,12 +234,15 @@ void loop() {
   uint16_t endIndex = (NUM_LEDS + START_OFFSET - spriteLen) % NUM_LEDS; // position where head hits last LED
   if (i == endIndex && !pausedAtEnd) {
     pausedAtEnd = true;
-    // briefly boost volume for the end effect (if desired) and play shutdown track
-    if (currentVolume < 20) myDFPlayer.volume(currentVolume + 10);
+    if (currentVolume < 20) myDFPlayer.volume(currentVolume + 10);  // boost volume for effect
     myDFPlayer.play(11);
     Serial.println(F("Reached end — playing end track and pausing"));
-    delay(5000);
-    myDFPlayer.volume(currentVolume);
+    
+    while(myDFPlayer.readState() != 0) {
+      delay(100);
+    }
+    
+    myDFPlayer.volume(currentVolume);  // restore volume
   }
 
   // Advance position (continuous loop)
