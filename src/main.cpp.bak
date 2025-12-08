@@ -1,0 +1,216 @@
+#include <Arduino.h>
+#include <FastLED.h>
+#include <DFRobotDFPlayerMini.h>
+#include <HardwareSerial.h>
+
+
+
+const uint8_t NUM_CARS = 10;
+const uint16_t START_OFFSET = 0;
+
+// initial speed (ms between frames). We'll copy this into a mutable variable so a pot can control it.
+const uint16_t TRAIN_SPEED = 220;  // default speed (ms between frames)
+const uint8_t  TRAIN_VOLUME = 10;  // Volume level for DFPlayer Mini (0-30)
+
+//DFRobot DFPlayer Mini setup
+// We'll use UART2 (index 2). You can use 1 for UART1 if you prefer.
+HardwareSerial ExtSerial(2);
+// Pick valid pins for your wiring:
+constexpr int RX_PIN = 16;  // GPIO16 (safe for RX)
+constexpr int TX_PIN = 17;  // GPIO17 (safe for TX)
+constexpr unsigned long BAUD = 9600;
+DFRobotDFPlayerMini myDFPlayer;
+// Potentiometer pins (ADC1) - using GPIO34/35 (far from UART2 on GPIO16/17) to minimize interference
+constexpr int VOLUME_POT_PIN = 34; // ADC1_CH6 (GPIO34) - far from UART2, less noisy
+// NOTE: Two 10k pots in parallel on the same 3.3V rail create loading that limits ADC range to ~0–450.
+// SOLUTION: Add a 10–100 nF capacitor from wiper to GND (reduces noise) and map 0–450 instead of 0–4095.
+// FUTURE: Upgrade to 100k pots to eliminate parallel loading, then change mapping back to 0–4095.
+constexpr int VOLUME_POT_READ_INTERVAL = 250; // ms between pot reads
+constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
+// Second pot for train speed control
+constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
+constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
+constexpr int SPEED_MIN_MS = 65;  // fastest animation delay
+constexpr int SPEED_MAX_MS = 500; // slowest animation delay
+
+constexpr uint8_t LED_PIN = 4;
+constexpr uint16_t NUM_LEDS = 800;
+
+CRGB leds[NUM_LEDS];
+
+static inline void safeSetLed(int idx, const CRGB &col) {
+  int v = idx % NUM_LEDS;
+  if (v < 0) v += NUM_LEDS;
+  leds[v] = col;
+}
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+
+  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+
+  // Initialize DFPlayer Mini
+  ExtSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN ); // Initialize Serial for debug output
+
+  Serial.println();
+  Serial.println(F("DFRobot DFPlayer Mini Demo"));
+  Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+  
+  if (!myDFPlayer.begin(ExtSerial)) {  //Use softwareSerial to communicate with mp3.
+    Serial.println(F("Unable to begin:"));
+    Serial.println(F("1.Please recheck the connection!"));
+    Serial.println(F("2.Please insert the SD card!"));
+    while(true){
+      delay(0); // Code to compatible with ESP8266 watch dog.
+    }
+  }
+  Serial.println(F("DFPlayer Mini online."));
+
+  /*
+  */
+  // configure ADC pin
+  analogReadResolution(12); // 12-bit ADC (0-4095)
+  // Ensure full-scale range up to 3.3V on the ADC pin
+  analogSetPinAttenuation(VOLUME_POT_PIN, ADC_11db);
+  // Configure attenuation for the speed pot as well
+  analogSetPinAttenuation(SPEED_POT_PIN, ADC_11db);
+  Serial.println(F("ADC configured: 12-bit resolution, 11dB attenuation"));
+  // nothing else required for ADC1 pins on ESP32
+
+  myDFPlayer.volume(TRAIN_VOLUME);  //Set volume value (0~30).
+  /*  
+  myDFPlayer.play(11);  //Play the first mp3 - Merry Christmas
+  Serial.println(F("Playing Merry Christmas"));
+  delay(5000);
+  */
+}
+
+
+void loop() {
+  static uint32_t lastPotRead = 0;
+  static uint8_t currentVolume = TRAIN_VOLUME;
+  static uint32_t lastSpeedRead = 0;
+  static int trainSpeedMs = TRAIN_SPEED; // mutable copy controlled by pot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}  i = START_OFFSET + (i + 1) % (NUM_LEDS - START_OFFSET);  }    delay(5000);    Serial.println(F("Playing shutdown track 11 - Merry Christmas "));    myDFPlayer.play(11);  // Play the shutdown mp3 - Merry Christmas    //myDFPlayer.stop();
+n  if(i == NUM_LEDS-2) {
+n    delay(trainSpeedMs);
+n  FastLED.show();  }    Serial.println(trainSpeedMs);    Serial.print(F(" speedMs: "));    Serial.print(i);    Serial.print(F("pos: "));    lastStatus = millis();  if (millis() - lastStatus >= 2000) {  static uint32_t lastStatus = 0;
+n  // Lightweight periodic status to help debug high-speed hangs (every 2s)  }    if (i > offset + 3) safeSetLed(i - offset - 4, CRGB(5, 0, 0));    // Tail light    if (i > offset + 2) safeSetLed(i - offset - 3, CRGB(100, 0, 0));  // Dim part    if (i > offset + 1) safeSetLed(i - offset - 2, CRGB(150, 0, 0));  // Medium part    if (i > offset)     safeSetLed(i - offset - 1, CRGB(200, 0, 0));  // Bright part    int offset = car * 4;  // Each car starts 4 LEDs back  for (uint8_t car = 0; car < NUM_CARS; car++) {  safeSetLed(i, CRGB::Red);  // Draw 4 cars, each 4 LEDs long (use safeSetLed to avoid out-of-bounds)  safeSetLed(i + 1, CRGB(100,100,100));         // White headlight in front  // Train effect - white headlight followed by red headlight and trailing cars    }    }      delay(80);      // short pause so we don't hammer the player      if(playcounter > 9) playcounter = 1; // defensive      // wrap playcounter to a sensible range if desired (adjust max as needed)      playcounter++;      // advance to next track      isPlaying = false;      Serial.println(playcounter);      Serial.print(F("Playback finished for track: "));      // DFPlayer finished playing    } else if(isPlaying && readState == 0) {      isPlaying = true;      waitingForStart = false;      Serial.println(playcounter);      Serial.print(F("Playback started for track: "));      // DFPlayer reports it's now playing (started)    } else if(waitingForStart && readState != 0) {      delay(80);      // small delay to allow DFPlayer to accept the command      waitingForStart = true;      myDFPlayer.play(playcounter);      Serial.println(playcounter);      Serial.print(F("Requesting play of track: "));      // Nothing is playing and we haven't requested the next track yet    if(!isPlaying && !waitingForStart && readState == 0) {    // readState == 0 means idle/stopped for this library    byte readState = myDFPlayer.readState();  } else {    isPlaying = true; // assume startup track is playing    waitingForStart = false;    playcounter = 0;    delay(14500);    Serial.println(F("Playing startup track 10"));    myDFPlayer.play(10);  //Play the startup mp3 - All Aboard    FastLED.show(); // Update LEDs to show cleared state
+n  if(i == START_OFFSET) {  // pot reading state  static bool isPlaying = false;       // currently playing  static bool waitingForStart = false; // we've requested play, waiting for readState to indicate it's started  // and to ensure playcounter increments only after a track finishes.  // Playback state machine to avoid issuing duplicate play commands  static uint8_t playcounter = 1;    fill_solid(leds, NUM_LEDS, CRGB::Black);  // Clear all LEDs   static uint16_t i = START_OFFSET;   }    }      Serial.println(trainSpeedMs);      Serial.print(F(" -> trainSpeedMs: "));      Serial.print(raw2);      Serial.print(F("Raw speed ADC: "));      trainSpeedMs = mapped;    if (abs(mapped - trainSpeedMs) > SPEED_HYST) {    int mapped = map(raw2, 0, 4095, SPEED_MIN_MS, SPEED_MAX_MS);    int raw2 = analogRead(SPEED_POT_PIN);    lastSpeedRead = now;  if (now - lastSpeedRead >= VOLUME_POT_READ_INTERVAL) {  }    }      Serial.println(currentVolume);      Serial.print(F(" -> Mapped volume: "));      Serial.print(raw);      Serial.print(F("Raw ADC: "));      myDFPlayer.volume(currentVolume);      currentVolume = vol;    if (vol + VOLUME_HYST < currentVolume || vol > currentVolume + VOLUME_HYST) {    if (vol < 0) vol = 0;    if (vol > 30) vol = 30;  uint8_t vol = map(raw, 0, 4095, 0, 30);  // map to 0..30 (12-bit ADC range is 0..4095)    int raw = analogRead(VOLUME_POT_PIN); // 0..4095    lastPotRead = now;  if (!lastPotRead || (now - lastPotRead >= VOLUME_POT_READ_INTERVAL)) {  uint32_t now = millis();n  // Read potentiometer periodically and map to volume 0-30

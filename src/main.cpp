@@ -3,12 +3,9 @@
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
-constexpr uint8_t LED_PIN = 4;
-constexpr uint16_t NUM_LEDS = 800;
 
-CRGB leds[NUM_LEDS];
 
-const uint8_t NUM_CARS = 7;
+const uint8_t NUM_CARS = 10;
 const uint16_t START_OFFSET = 0;
 
 // initial speed (ms between frames). We'll copy this into a mutable variable so a pot can control it.
@@ -33,8 +30,13 @@ constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
 constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 100;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 90;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
+
+constexpr uint8_t LED_PIN = 4;
+constexpr uint16_t NUM_LEDS = 800;
+
+CRGB leds[NUM_LEDS];
 
 void setup() {
   // put your setup code here, to run once:
@@ -104,6 +106,7 @@ void loop() {
     }
   }
 
+  // Read speed pot periodically and map to speed range
   if (now - lastSpeedRead >= VOLUME_POT_READ_INTERVAL) {
     lastSpeedRead = now;
     int raw2 = analogRead(SPEED_POT_PIN);
@@ -127,9 +130,10 @@ void loop() {
   // and to ensure playcounter increments only after a track finishes.
   static bool waitingForStart = false; // we've requested play, waiting for readState to indicate it's started
   static bool isPlaying = false;       // currently playing
-  // pot reading state
+  static bool startupPlayed = false;   // startup only plays once at power-on
 
-  if(i == START_OFFSET) {
+  if(i == START_OFFSET && !startupPlayed) {
+    // Only play startup once at power-on
     FastLED.show(); // Update LEDs to show cleared state
     myDFPlayer.play(10);  //Play the startup mp3 - All Aboard
     Serial.println(F("Playing startup track 10"));
@@ -137,6 +141,7 @@ void loop() {
     playcounter = 0;
     waitingForStart = false;
     isPlaying = true; // assume startup track is playing
+    startupPlayed = true;
   } else {
     byte readState = myDFPlayer.readState();
 
@@ -169,30 +174,76 @@ void loop() {
     }
   }
   
-  // Train effect - white headlight followed by red headlight and trailing cars
-  if (i > 0) leds[i + 1] = CRGB(100,100,100);         // White headlight in front
+  // Build the train sprite once and render it at a moving head position
+  static bool spriteBuilt = false;
+  static uint16_t spriteLen = 0;
+  static CRGB *sprite = nullptr;
+  static uint16_t headPos = 0;
 
-  // Draw 4 cars, each 4 LEDs long
-  leds[i] = CRGB::Red;
-  for (uint8_t car = 0; car < NUM_CARS; car++) {
-    uint8_t offset = car * 4;  // Each car starts 4 LEDs back
-    if (i > offset)     leds[i - offset - 1] = CRGB(200, 0, 0);  // Bright part
-    if (i > offset + 1) leds[i - offset - 2] = CRGB(150, 0, 0);  // Medium part
-    if (i > offset + 2) leds[i - offset - 3] = CRGB(100, 0, 0);  // Dim part
-    if (i > offset + 3) leds[i - offset - 4] = CRGB(5, 0, 0);    // Tail light
+  if (!spriteBuilt) {
+    // sprite layout: head + (NUM_CARS * (4 car LEDs + 1 gap)) + 3 caboose LEDs
+    spriteLen = 4 + NUM_CARS * 5;
+    sprite = new CRGB[spriteLen];
+    // clear
+    for (uint16_t s = 0; s < spriteLen; ++s) sprite[s] = CRGB::Black;
+    // head
+    sprite[0] = CRGB(100, 100, 100);
+    // cars
+    uint16_t p = 1;
+    for (uint8_t car = 0; car < NUM_CARS && p + 3 < spriteLen; ++car) {
+      if (car % 2 == 0) {
+        sprite[p] = CRGB(200, 0, 0);
+        sprite[p + 1] = CRGB(150, 0, 0);
+        sprite[p + 2] = CRGB(100, 0, 0);
+        sprite[p + 3] = CRGB(5, 3, 0);
+      } else {
+        sprite[p] = CRGB(0, 200, 0);
+        sprite[p + 1] = CRGB(0, 150, 0);
+        sprite[p + 2] = CRGB(0, 100, 0);
+        sprite[p + 3] = CRGB(5, 3, 0);
+      }
+      p += 5; // 4 LEDs + 1 gap
+    }
+    // caboose (3 LEDs) if space
+    if (p + 2 < spriteLen) {
+      sprite[p] = CRGB(200, 0, 0);
+      sprite[p + 1] = CRGB(150, 0, 0);
+      sprite[p + 2] = CRGB(100, 0, 0);
+    }
+    spriteBuilt = true;
+  }
+
+  // Render sprite at the current train index `i` (keeps audio/startup in sync)
+  // Draw sprite reversed so sprite[0] (head) is at the leading edge
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  for (uint16_t s = 0; s < spriteLen; ++s) {
+    // place sprite[s] at decreasing offsets so head appears at the front
+    int32_t idx = (int32_t)i + (int32_t)spriteLen - 1 - (int32_t)s;
+    idx %= NUM_LEDS;
+    if (idx < 0) idx += NUM_LEDS;
+    leds[(uint16_t)idx] = sprite[s];
   }
 
   FastLED.show();
   delay(trainSpeedMs);
 
-  
-
-  if(i == NUM_LEDS-2) {
-    //myDFPlayer.stop();
-    myDFPlayer.play(11);  // Play the shutdown mp3 - Merry Christmas
-    Serial.println(F("Playing shutdown track 11 - Merry Christmas "));
+  // Pause once when the train reaches the physical end of the strip
+  static bool pausedAtEnd = false;
+  uint16_t endIndex = (NUM_LEDS + START_OFFSET - spriteLen) % NUM_LEDS; // position where head hits last LED
+  if (i == endIndex && !pausedAtEnd) {
+    pausedAtEnd = true;
+    // briefly boost volume for the end effect (if desired) and play shutdown track
+    if (currentVolume < 20) myDFPlayer.volume(currentVolume + 10);
+    myDFPlayer.play(11);
+    Serial.println(F("Reached end — playing end track and pausing"));
     delay(5000);
+    myDFPlayer.volume(currentVolume);
   }
+
+  // Advance position (continuous loop)
   i = START_OFFSET + (i + 1) % (NUM_LEDS - START_OFFSET);
+
+  // Reset pause flag when the train returns to the start
+  if (i == START_OFFSET) pausedAtEnd = false;
 }
 
