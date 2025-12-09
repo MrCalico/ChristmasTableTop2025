@@ -31,6 +31,8 @@ constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
 constexpr int SPEED_MIN_MS = 100;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
+constexpr int BUSY_PIN = 27; // optional pin to monitor DFPlayer busy status
+
 constexpr uint8_t LED_PIN = 4;
 constexpr uint16_t NUM_LEDS = 800;
 
@@ -46,14 +48,20 @@ void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN
   Serial.print("Playing track: ");
   Serial.println(track);
   if(waitForCompletion) {
-    delay(220);
-    while ((playerState = myDFPlayer.readState()) != 0 && waitForCompletion)
-    {
-      Serial.print(F("Current track state: "));
-      Serial.println(playerState);
-      delay(500); // wait while the track is playing
+    uint32_t now = millis();
+    uint32_t lastPlayCheck = now;
+    Serial.print(F("Wating, track state: "));
+    delay(1000);
+    while(waitForCompletion) {
+      now = millis();
+      if (now - lastPlayCheck >= 500) {
+        waitForCompletion = !digitalRead(BUSY_PIN); // simulate readState() using BUSY pin
+        Serial.print(playerState);
+        lastPlayCheck = now;
+      }
+      delay(10); // small delay to avoid busy loop
     }
-    Serial.println(F("Track complete."));
+    Serial.println(F(" Track complete."));
   }
 }
 
@@ -66,6 +74,7 @@ void setup() {
   // Initialize DFPlayer Mini
   ExtSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN ); // Initialize Serial for debug output
 
+  pinMode(BUSY_PIN, INPUT);
   Serial.println();
   Serial.println(F("DFRobot DFPlayer Mini Demo"));
   Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
@@ -101,8 +110,10 @@ void loop() {
   static int trainSpeedMs = TRAIN_SPEED; // mutable copy controlled by pot
   static uint32_t lastPlayCheck = millis();
   static bool playbackInitialized = false;  // flag to start chugging sounds on first loop
+  static uint16_t i = START_OFFSET;
+  static uint8_t lastPlayTrack = 0;
 
-  // Read potentiometer periodically and map to volume 0-30
+    // Read potentiometer periodically and map to volume 0-30
   uint32_t now = millis();
 
   if (!lastPotRead || (now - lastPotRead >= VOLUME_POT_READ_INTERVAL)) {
@@ -136,8 +147,6 @@ void loop() {
     }
   }
  
-  static uint16_t i = START_OFFSET;
-  static uint8_t lastPlayTrack = 0;
   // Clear all LEDs 
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 
@@ -185,36 +194,15 @@ void loop() {
       Serial.println(F("Reached end of line - playing track 11"));
       lastPlayCheck = now;  // Reset timer after playing end-of-line track
     } else {   // Not at the end yet.
-      //Initialize playback on first loop
-      if (!playbackInitialized) {
-        playbackInitialized = true;
-        QueueTrack(++lastPlayTrack, false, currentVolume);  // Start with station sounds
-        lastPlayCheck = now;
-      }
-      
       if(now - lastPlayCheck >= 300) {
-        if(myDFPlayer.available()) {
-          Serial.println(F("DFPlayer Mini available data."));
-          uint8_t type = myDFPlayer.readType();
-          int value = myDFPlayer.read();
-          if(type == DFPlayerPlayFinished) {
-            Serial.print(F("Track finished playing."));
-            Serial.println(F("DFPlayer Mini available for new track."));
-            Serial.print(F(" ms since last check, track state: "));
-            Serial.println(now-lastPlayCheck);
-            Serial.print(F("Current track state: "));
-            QueueTrack(++lastPlayTrack%9, false, currentVolume);  // play chugging sound (track 1)
+        if(digitalRead(BUSY_PIN)) { // simulate readState() using BUSY pin
+          // Previous track finished, queue next chugging sound if any
+             QueueTrack(++lastPlayTrack%9, false, currentVolume);  // play chugging sound (track 1)
             lastPlayCheck = now;  // Reset timer after queuing new track
-          } else {
-            Serial.print(F("Received message type: "));
-            Serial.print(type);
-            Serial.print(F(", value: "));
-            Serial.println(value);
-          }
-        }
+        } 
       }
-    } 
-  }
+    }
+  } 
 
   // Move to next position
   i = START_OFFSET + (i + 1) % (NUM_LEDS - START_OFFSET);
