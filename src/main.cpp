@@ -3,14 +3,12 @@
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
-
-
 const uint8_t NUM_CARS = 11;  // number of train cars (not including locomotive and caboose) Odd # for green before cabose.
 const uint16_t START_OFFSET = 0;
 
 // initial speed (ms between frames). We'll copy this into a mutable variable so a pot can control it.
 const uint16_t TRAIN_SPEED = 220;  // default speed (ms between frames)
-const uint8_t  TRAIN_VOLUME = 20;  // Volume level for DFPlayer Mini (0-30)
+const uint8_t  TRAIN_VOLUME = 30;  // Volume level for DFPlayer Mini (0-30)
 
 //DFRobot DFPlayer Mini setup
 // We'll use UART2 (index 2). You can use 1 for UART1 if you prefer.
@@ -30,13 +28,34 @@ constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
 constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 0;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 100;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
 constexpr uint8_t LED_PIN = 4;
 constexpr uint16_t NUM_LEDS = 800;
 
+uint8_t playerState = 0;
+  
 CRGB leds[NUM_LEDS];
+
+void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN_VOLUME)
+{
+  myDFPlayer.volume(volume); // Set volume value (0~30).
+  // Play an initial sound on startup (uncomment or change track as desired)
+  myDFPlayer.play(track); // play track 11 on the SD card - Ho Ho Ho Merry Christmas
+  Serial.print("Playing track: ");
+  Serial.println(track);
+  if(waitForCompletion) {
+    delay(220);
+    while ((playerState = myDFPlayer.readState()) != 0 && waitForCompletion)
+    {
+      Serial.print(F("Current track state: "));
+      Serial.println(playerState);
+      delay(500); // wait while the track is playing
+    }
+    Serial.println(F("Track complete."));
+  }
+}
 
 void setup() {
   // put your setup code here, to run once:
@@ -72,22 +91,20 @@ void setup() {
   Serial.println(F("ADC configured: 12-bit resolution, 11dB attenuation"));
   // nothing else required for ADC1 pins on ESP32
 
-  myDFPlayer.volume(TRAIN_VOLUME);  //Set volume value (0~30).
-  // Play an initial sound on startup (uncomment or change track as desired)
-  myDFPlayer.play(11);  // play track 11 on the SD card - Ho Ho Ho Merry Christmas
-  Serial.println(F("Playing initial track"));
-
+  QueueTrack(11, true, TRAIN_VOLUME); // Play initial track 11 and wait for completion
 }
-
 
 void loop() {
   static uint32_t lastPotRead = 0;
   static uint8_t currentVolume = TRAIN_VOLUME;
   static uint32_t lastSpeedRead = 0;
   static int trainSpeedMs = TRAIN_SPEED; // mutable copy controlled by pot
+  static uint32_t lastPlayCheck = millis();
+  static bool playbackInitialized = false;  // flag to start chugging sounds on first loop
 
   // Read potentiometer periodically and map to volume 0-30
   uint32_t now = millis();
+
   if (!lastPotRead || (now - lastPotRead >= VOLUME_POT_READ_INTERVAL)) {
     lastPotRead = now;
     int raw = analogRead(VOLUME_POT_PIN); // 0..4095
@@ -120,7 +137,7 @@ void loop() {
   }
  
   static uint16_t i = START_OFFSET;
-
+  static uint8_t lastPlayTrack = 0;
   // Clear all LEDs 
   fill_solid(leds, NUM_LEDS, CRGB::Black);
 
@@ -154,8 +171,56 @@ void loop() {
   FastLED.show();
   delay(trainSpeedMs);
 
+  // If we've reached the end of the line, play the shutdown mp3 and pause
+  if (i == 0) {
+    // At start position
+    playbackInitialized = false;  // Reset so chugging sounds restart each lap
+    QueueTrack(1, true, currentVolume);  // Play track #1 (station) at start
+    QueueTrack(10, true, currentVolume);  // Play track #10 (all aboard) after shutdown
+    lastPlayCheck = now;  // Reset timer after playing startup tracks
+    lastPlayTrack = 0;   // Reset track counter for chugging sounds
+  } else {
+    if (i == NUM_LEDS - 1) {
+      QueueTrack(11, true, currentVolume);  // Play track #11 at end of line
+      Serial.println(F("Reached end of line - playing track 11"));
+      lastPlayCheck = now;  // Reset timer after playing end-of-line track
+    } else {   // Not at the end yet.
+      //Initialize playback on first loop
+      if (!playbackInitialized) {
+        playbackInitialized = true;
+        QueueTrack(++lastPlayTrack, false, currentVolume);  // Start with station sounds
+        lastPlayCheck = now;
+      }
+      
+      if(now - lastPlayCheck >= 300) {
+        if(myDFPlayer.available()) {
+          Serial.println(F("DFPlayer Mini available data."));
+          uint8_t type = myDFPlayer.readType();
+          int value = myDFPlayer.read();
+          if(type == DFPlayerPlayFinished) {
+            Serial.print(F("Track finished playing."));
+            Serial.println(F("DFPlayer Mini available for new track."));
+            Serial.print(F(" ms since last check, track state: "));
+            Serial.println(now-lastPlayCheck);
+            Serial.print(F("Current track state: "));
+            QueueTrack(++lastPlayTrack%9, false, currentVolume);  // play chugging sound (track 1)
+            lastPlayCheck = now;  // Reset timer after queuing new track
+          } else {
+            Serial.print(F("Received message type: "));
+            Serial.print(type);
+            Serial.print(F(", value: "));
+            Serial.println(value);
+          }
+        }
+      }
+    } 
+  }
+
   // Move to next position
   i = START_OFFSET + (i + 1) % (NUM_LEDS - START_OFFSET);
-
+  if(i%100==0) {
+    Serial.print(F("Train position i: "));
+    Serial.println(i);
+  }
 }
 
