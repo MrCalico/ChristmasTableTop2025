@@ -200,6 +200,9 @@ void loop() {
   }
   constexpr uint16_t END_OF_LINE_INDEX = NUM_LEDS-2; // position before looping back to start
   if(i==END_OF_LINE_INDEX) {
+    static ulong routeCounter = 0;
+    Serial.print(F("End of line reached, route count: "));
+    Serial.println(routeCounter++);
     QueueTrack(11, true, currentVolume); // Play track 11 at end of loop
     QueueTrack(7, true, currentVolume);  // Play whistle sound
     QueueTrack(10, true, currentVolume); // Play at end of loop
