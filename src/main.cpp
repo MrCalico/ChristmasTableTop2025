@@ -42,30 +42,40 @@ CRGB leds[NUM_LEDS];
 
 void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN_VOLUME, uint16_t duration = std::numeric_limits<uint16_t>::max())
 {
-  myDFPlayer.volume(volume); // Set volume value (0~30).
+  static uint8_t lastVolume = 255;
+
   // Play an initial sound on startup (uncomment or change track as desired)
-  if(digitalRead(BUSY_PIN)==LOW) {
-    Serial.print("DFPlayer busy, stopping");
+  int playerBusy = digitalRead(BUSY_PIN);
+  if(playerBusy == LOW) {
+    Serial.print("DFPlayer busy, stopping: ");
     myDFPlayer.stop();
-    while(!digitalRead(BUSY_PIN)) {
-      delay(100); // wait for not busy
-      Serial.print(".");
+    while((playerBusy=digitalRead(BUSY_PIN))!=HIGH) {
+      delay(222); // wait for not busy
+      Serial.print(playerBusy);
     }
     Serial.println("DFPlayer ready.");
   }
+  // Only set volume if it has changed
+  if(volume != lastVolume) {
+    myDFPlayer.volume(volume); // Set volume value (0~30).
+    lastVolume = volume;
+  }
   uint32_t playerStarted = millis();
-  Serial.print("Playing track: ");
-  Serial.println(track);
+  Serial.print("Playing track: ");  
   myDFPlayer.play(track); // play track 11 on the SD card - Ho Ho Ho Merry Christmas
+  while(digitalRead(BUSY_PIN)!=LOW) {
+    delay(10); // wait for playback to start
+  } 
+  Serial.println(track);
   if(waitForCompletion) {
     uint32_t now = millis();
     uint32_t lastPlayCheck = now;
     Serial.print(F("Waiting, track state: "));
-    delay(1000);
-    while(waitForCompletion) {
+    delay(100);
+    while(waitForCompletion && digitalRead(BUSY_PIN)==LOW) {
       now = millis();
       if (now - lastPlayCheck >= 500) {
-        waitForCompletion = !digitalRead(BUSY_PIN); // simulate readState() using BUSY pin
+        //waitForCompletion = !digitalRead(BUSY_PIN); // simulate readState() using BUSY pin
         if (now-playerStarted >= duration) {
           Serial.println(F(" Track duration exceeded, stopping playback."));
           myDFPlayer.stop();
@@ -121,6 +131,7 @@ void setup() {
 }
 
 void loop() {
+  constexpr uint16_t END_OF_LINE_INDEX = NUM_LEDS-2; // position before looping back to start
   static uint32_t lastPotRead = 0;
   static uint8_t currentVolume = TRAIN_VOLUME;
   static uint32_t lastSpeedRead = 0;
@@ -200,17 +211,19 @@ void loop() {
   FastLED.show();
   delay(trainSpeedMs);
 
-  if(now - lastPlayCheck >= 300) {
-    if(digitalRead(BUSY_PIN)) { // simulate readState() using BUSY pin
+  if( (i!=END_OF_LINE_INDEX) && (now - lastPlayCheck >= 1000) ) {
+    if(digitalRead(BUSY_PIN)==HIGH) { // simulate readState() using BUSY pin
+      Serial.println(F("Not Busy - Queuing Next"));
       QueueTrack(++lastPlayTrack%9 + 1, false, currentVolume);  // play chugging sound
       lastPlayCheck = now;
     }
   }
-  constexpr uint16_t END_OF_LINE_INDEX = NUM_LEDS-2; // position before looping back to start
+
   if(i==END_OF_LINE_INDEX) {
     static ulong routeCounter = 0;
+    Serial.println("________________________________________________________________");
     Serial.print(F("End of line reached, route count: "));
-    Serial.println(routeCounter++);
+    Serial.println(++routeCounter);
     QueueTrack(11, true, currentVolume); // Play track 11 at end of loop
     QueueTrack(7, true, currentVolume,5000);  // Play whistle sound
     QueueTrack(10, true, currentVolume); // Play at end of loop
