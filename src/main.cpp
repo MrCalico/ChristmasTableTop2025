@@ -4,7 +4,7 @@
 #include <HardwareSerial.h>
 
 const uint8_t NUM_CARS = 11;  // number of train cars (not including locomotive and caboose) Odd # for green before cabose.
-const uint16_t START_OFFSET = 0;
+// START_OFFSET removed — track is circular starting at index 0
 
 // initial speed (ms between frames). We'll copy this into a mutable variable so a pot can control it.
 const uint16_t TRAIN_SPEED = 220;  // default speed (ms between frames)
@@ -28,7 +28,7 @@ constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
 constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 100;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 1;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
 constexpr int BUSY_PIN = 27; // optional pin to monitor DFPlayer busy status
@@ -44,13 +44,22 @@ void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN
 {
   myDFPlayer.volume(volume); // Set volume value (0~30).
   // Play an initial sound on startup (uncomment or change track as desired)
+  if(digitalRead(BUSY_PIN)==LOW) {
+    Serial.print("DFPlayer busy, stopping");
+    myDFPlayer.stop();
+    while(digitalRead(BUSY_PIN)!=HIGH) {
+      delay(100); // wait for not busy
+      Serial.print(".");
+    }
+    Serial.println("DFPlayer ready.");
+  }
   myDFPlayer.play(track); // play track 11 on the SD card - Ho Ho Ho Merry Christmas
   Serial.print("Playing track: ");
   Serial.println(track);
   if(waitForCompletion) {
     uint32_t now = millis();
     uint32_t lastPlayCheck = now;
-    Serial.print(F("Wating, track state: "));
+    Serial.print(F("Waiting, track state: "));
     delay(1000);
     while(waitForCompletion) {
       now = millis();
@@ -110,13 +119,13 @@ void loop() {
   static int trainSpeedMs = TRAIN_SPEED; // mutable copy controlled by pot
   static uint32_t lastPlayCheck = millis();
   static bool playbackInitialized = false;  // flag to start chugging sounds on first loop
-  static uint16_t i = START_OFFSET;
+  static uint16_t i = 0;
   static uint8_t lastPlayTrack = 0;
 
     // Read potentiometer periodically and map to volume 0-30
   uint32_t now = millis();
 
-  if (!lastPotRead || (now - lastPotRead >= VOLUME_POT_READ_INTERVAL)) {
+  if (now - lastPotRead >= VOLUME_POT_READ_INTERVAL) {
     lastPotRead = now;
     int raw = analogRead(VOLUME_POT_PIN); // 0..4095
   // map to 0..30 (12-bit ADC range is 0..4095)
@@ -152,60 +161,52 @@ void loop() {
 
   // Simple train: one white headlight ahead + multi-LED red locomotive + trailing cars
   const uint8_t LOCO_REDS = 5; // number of red LEDs for the locomotive body
-  if (i + 1 < NUM_LEDS) {
-    leds[i + 1] = CRGB(150, 150, 150);  // white headlight ahead
-  }
+  // white headlight ahead (wraps circularly)
+  leds[(i + 1) % NUM_LEDS] = CRGB(150, 150, 150);
 
-  // Draw locomotive body as LOCO_REDS red LEDs behind the headlight
+  // Draw locomotive body as LOCO_REDS red LEDs behind the headlight (wrap indices)
   for (uint8_t r = 0; r < LOCO_REDS; r++) {
-    if (i >= r) leds[i - r] = CRGB::Red;
+    uint16_t idx = (i + NUM_LEDS - r) % NUM_LEDS;
+    leds[idx] = CRGB::Red;
   }
 
   // Draw trailing cars (4 LEDs each, alternating green and red), starting after the locomotive
   for (uint8_t car = 0; car < NUM_CARS; car++) {
     uint16_t offset = LOCO_REDS + (car * 4);  // Each car starts after the locomotive
     CRGB color = (car % 2 == 0) ? CRGB(0, 200, 0) : CRGB(200, 0, 0);  // green, red, green, red...
-    if (i > offset)     leds[i - offset - 1] = color;
-    if (i > offset + 1) leds[i - offset - 2] = CRGB(color.r * 0.75, color.g * 0.75, color.b * 0.75);  // 75% brightness
-    if (i > offset + 2) leds[i - offset - 3] = CRGB(color.r * 0.5, color.g * 0.5, color.b * 0.5);   // 50% brightness
-    if (i > offset + 3) leds[i - offset - 4] = CRGB(color.r * 0.25, color.g * 0.25, color.b * 0.25); // 25% brightness (tail light)
+    uint16_t base = (i + NUM_LEDS - offset - 1) % NUM_LEDS;
+    leds[base] = color;
+    leds[(base + NUM_LEDS - 1) % NUM_LEDS] = CRGB(color.r * 0.75, color.g * 0.75, color.b * 0.75);
+    leds[(base + NUM_LEDS - 2) % NUM_LEDS] = CRGB(color.r * 0.5, color.g * 0.5, color.b * 0.5);
+    leds[(base + NUM_LEDS - 3) % NUM_LEDS] = CRGB(color.r * 0.25, color.g * 0.25, color.b * 0.25);
   }
 
   // Then add a dedicated caboose after the cars
   uint16_t caboseStart = LOCO_REDS + (NUM_CARS * 4) + 1;
-  if (i > caboseStart)     leds[i - caboseStart - 1] = CRGB(255, 0, 0);
-  if (i > caboseStart + 1) leds[i - caboseStart - 2] = CRGB(200, 0, 0);
-  if (i > caboseStart + 2) leds[i - caboseStart - 3] = CRGB(100, 80, 0);
+  // caboose (wrap indices)
+  uint16_t baseCab = (i + NUM_LEDS - caboseStart - 1) % NUM_LEDS;
+  leds[baseCab] = CRGB(255, 0, 0);
+  leds[(baseCab + NUM_LEDS - 1) % NUM_LEDS] = CRGB(200, 0, 0);
+  leds[(baseCab + NUM_LEDS - 2) % NUM_LEDS] = CRGB(100, 80, 0);
 
   FastLED.show();
   delay(trainSpeedMs);
 
-  // If we've reached the end of the line, play the shutdown mp3 and pause
-  if (i == 0) {
-    // At start position
-    playbackInitialized = false;  // Reset so chugging sounds restart each lap
-    QueueTrack(1, true, currentVolume);  // Play track #1 (station) at start
-    QueueTrack(10, true, currentVolume);  // Play track #10 (all aboard) after shutdown
-    lastPlayCheck = now;  // Reset timer after playing startup tracks
-    lastPlayTrack = 0;   // Reset track counter for chugging sounds
-  } else {
-    if (i == NUM_LEDS - 1) {
-      QueueTrack(11, true, currentVolume);  // Play track #11 at end of line
-      Serial.println(F("Reached end of line - playing track 11"));
-      lastPlayCheck = now;  // Reset timer after playing end-of-line track
-    } else {   // Not at the end yet.
-      if(now - lastPlayCheck >= 300) {
-        if(digitalRead(BUSY_PIN)) { // simulate readState() using BUSY pin
-          // Previous track finished, queue next chugging sound if any
-             QueueTrack(++lastPlayTrack%9, false, currentVolume);  // play chugging sound (track 1)
-            lastPlayCheck = now;  // Reset timer after queuing new track
-        } 
-      }
+  if(now - lastPlayCheck >= 300) {
+    if(digitalRead(BUSY_PIN)) { // simulate readState() using BUSY pin
+      QueueTrack(++lastPlayTrack%9 + 1, false, currentVolume);  // play chugging sound
+      lastPlayCheck = now;
     }
-  } 
-
-  // Move to next position
-  i = START_OFFSET + (i + 1) % (NUM_LEDS - START_OFFSET);
+  }
+  constexpr uint16_t END_OF_LINE_INDEX = NUM_LEDS-2; // position before looping back to start
+  if(i==END_OF_LINE_INDEX) {
+    QueueTrack(11, true, currentVolume); // Play track 11 at end of loop
+    QueueTrack(7, true, currentVolume);  // Play whistle sound
+    QueueTrack(10, true, currentVolume); // Play at end of loop
+  }
+  
+  // Move to next position (wrap circularly)
+  i = (i + 1) % NUM_LEDS;
   if(i%100==0) {
     Serial.print(F("Train position i: "));
     Serial.println(i);
