@@ -28,7 +28,7 @@ constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
 constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 1;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 10;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
 constexpr int BUSY_PIN = 27; // optional pin to monitor DFPlayer busy status
@@ -40,7 +40,7 @@ uint8_t playerState = 0;
   
 CRGB leds[NUM_LEDS];
 
-void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN_VOLUME)
+void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN_VOLUME, uint16_t duration = std::numeric_limits<uint16_t>::max())
 {
   myDFPlayer.volume(volume); // Set volume value (0~30).
   // Play an initial sound on startup (uncomment or change track as desired)
@@ -53,6 +53,7 @@ void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN
     }
     Serial.println("DFPlayer ready.");
   }
+  uint32_t playerStarted = millis();
   Serial.print("Playing track: ");
   Serial.println(track);
   myDFPlayer.play(track); // play track 11 on the SD card - Ho Ho Ho Merry Christmas
@@ -65,12 +66,19 @@ void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN
       now = millis();
       if (now - lastPlayCheck >= 500) {
         waitForCompletion = !digitalRead(BUSY_PIN); // simulate readState() using BUSY pin
-        Serial.print(playerState);
+        if (now-playerStarted >= duration) {
+          Serial.println(F(" Track duration exceeded, stopping playback."));
+          myDFPlayer.stop();
+          delay(222); // small delay to allow stop command to take effect
+          //waitForCompletion = false;
+        }
+        Serial.print(waitForCompletion);
         lastPlayCheck = now;
       }
       delay(10); // small delay to avoid busy loop
     }
-    Serial.println(F(" Track complete."));
+    Serial.print(F(" Track complete. Duration: "));
+    Serial.println(now - playerStarted);
   }
 }
 
@@ -204,7 +212,7 @@ void loop() {
     Serial.print(F("End of line reached, route count: "));
     Serial.println(routeCounter++);
     QueueTrack(11, true, currentVolume); // Play track 11 at end of loop
-    QueueTrack(7, true, currentVolume);  // Play whistle sound
+    QueueTrack(7, true, currentVolume,5000);  // Play whistle sound
     QueueTrack(10, true, currentVolume); // Play at end of loop
   }
   
