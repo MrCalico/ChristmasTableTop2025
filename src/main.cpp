@@ -47,15 +47,15 @@ void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN
   if(digitalRead(BUSY_PIN)==LOW) {
     Serial.print("DFPlayer busy, stopping");
     myDFPlayer.stop();
-    while(digitalRead(BUSY_PIN)!=HIGH) {
+    while(!digitalRead(BUSY_PIN)) {
       delay(100); // wait for not busy
       Serial.print(".");
     }
     Serial.println("DFPlayer ready.");
   }
-  myDFPlayer.play(track); // play track 11 on the SD card - Ho Ho Ho Merry Christmas
   Serial.print("Playing track: ");
   Serial.println(track);
+  myDFPlayer.play(track); // play track 11 on the SD card - Ho Ho Ho Merry Christmas
   if(waitForCompletion) {
     uint32_t now = millis();
     uint32_t lastPlayCheck = now;
