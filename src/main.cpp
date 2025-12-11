@@ -28,13 +28,13 @@ constexpr uint8_t VOLUME_HYST = 1; // minimum volume change to apply
 // Second pot for train speed control
 constexpr int SPEED_POT_PIN = 35; // ADC1_CH7 (GPIO35) - far from UART2, less noisy
 constexpr uint8_t SPEED_HYST = 5; // ms delta before applying new speed
-constexpr int SPEED_MIN_MS = 10;  // fastest animation delay
+constexpr int SPEED_MIN_MS = 1;  // fastest animation delay
 constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 
 constexpr int BUSY_PIN = 27; // optional pin to monitor DFPlayer busy status
 
 constexpr uint8_t LED_PIN = 4;
-constexpr uint16_t NUM_LEDS = 800;
+constexpr uint16_t NUM_LEDS = 1088;
 
 uint8_t playerState = 0;
   
