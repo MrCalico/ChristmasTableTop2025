@@ -3,6 +3,20 @@
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
+const int MP3_STATION = 13;
+const int MP3_HORN = 2;
+const int MP3_RUNNING = 3;
+const int MP3_BELL = 4;
+const int MPE_WHISTLE = 5;
+const int MP3_CROSSING_HORN = 6;
+const int MP3_CROSSING_BELL = 7;
+const int MP3_Whistle2 = 8;
+const int MP3_Crossing_Bell2 = 9;
+const int MP3_ABORD = 10;
+const int MP3_MerryChristmas = 11;
+const int MP3_Station = 12;
+const int MP3_Parked = 13;
+
 const uint8_t NUM_CARS = 11;  // number of train cars (not including locomotive and caboose) Odd # for green before cabose.
 // START_OFFSET removed — track is circular starting at index 0
 
@@ -36,9 +50,13 @@ constexpr int BUSY_PIN = 27; // optional pin to monitor DFPlayer busy status
 constexpr uint8_t LED_PIN = 4;
 constexpr uint16_t NUM_LEDS = 1088;
 
+constexpr uint8_t LED_HOUSE_PIN = 19; // House Strip of LEDS
+constexpr uint16_t NUM_HOUSE_LEDS = 15; // same number for simplicity
+
 uint8_t playerState = 0;
   
 CRGB leds[NUM_LEDS];
+CRGB ledsHouse[NUM_HOUSE_LEDS];
 
 void QueueTrack(int track, bool waitForCompletion = true, uint8_t volume = TRAIN_VOLUME, uint16_t duration = std::numeric_limits<uint16_t>::max())
 {
@@ -97,6 +115,7 @@ void setup() {
   Serial.begin(9600);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.addLeds<WS2812, LED_HOUSE_PIN, GRB>(ledsHouse, NUM_HOUSE_LEDS); // same LED array for simplicity
 
   // Initialize DFPlayer Mini
   ExtSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN ); // Initialize Serial for debug output
@@ -129,6 +148,13 @@ void setup() {
 
   QueueTrack(11, true, TRAIN_VOLUME); // Play initial track 11 and wait for completion
 }
+
+void SantaStop() {
+  Serial.println(F("Santa Stop Triggered!"));
+  QueueTrack(MP3_MerryChristmas, true, TRAIN_VOLUME); // Play track 12 and wait for completion
+}
+
+const int SantaStopPosition = 600; // position index to trigger Santa stop
 
 void loop() {
   constexpr uint16_t END_OF_LINE_INDEX = NUM_LEDS-2; // position before looping back to start
@@ -177,11 +203,15 @@ void loop() {
  
   // Clear all LEDs 
   fill_solid(leds, NUM_LEDS, CRGB::Black);
+  fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black); // same LED array for simplicity
 
   // Simple train: one white headlight ahead + multi-LED red locomotive + trailing cars
   const uint8_t LOCO_REDS = 5; // number of red LEDs for the locomotive body
   // white headlight ahead (wraps circularly)
   leds[(i + 1) % NUM_LEDS] = CRGB(150, 150, 150);
+  
+  ledsHouse[(i + 1) % NUM_HOUSE_LEDS] = CRGB(150, 150, 150);
+  
 
   // Draw locomotive body as LOCO_REDS red LEDs behind the headlight (wrap indices)
   for (uint8_t r = 0; r < LOCO_REDS; r++) {
@@ -210,6 +240,10 @@ void loop() {
 
   FastLED.show();
   delay(trainSpeedMs);
+
+  if(i == SantaStopPosition) {
+    SantaStop();
+  }
 
   if( (i!=END_OF_LINE_INDEX) && (now - lastPlayCheck >= 1000) ) {
     if(digitalRead(BUSY_PIN)==HIGH) { // simulate readState() using BUSY pin
