@@ -7,7 +7,7 @@ const int MP3_STATION = 13;
 const int MP3_HORN = 2;
 const int MP3_RUNNING = 3;
 const int MP3_BELL = 4;
-const int MPE_WHISTLE = 5;
+const int MP3_WHISTLE = 5;
 const int MP3_CROSSING_HORN = 6;
 const int MP3_CROSSING_BELL = 7;
 const int MP3_Whistle2 = 8;
@@ -48,7 +48,7 @@ constexpr int SPEED_MAX_MS = 500; // slowest animation delay
 constexpr int BUSY_PIN = 27; // optional pin to monitor DFPlayer busy status
 
 constexpr uint8_t LED_PIN = 4;
-constexpr uint16_t NUM_LEDS = 1088;
+constexpr uint16_t NUM_LEDS = 800;
 
 constexpr uint8_t LED_HOUSE_PIN = 19; // House Strip of LEDS
 constexpr uint16_t NUM_HOUSE_LEDS = 15; // same number for simplicity
@@ -151,10 +151,29 @@ void setup() {
 
 void SantaStop() {
   Serial.println(F("Santa Stop Triggered!"));
-  QueueTrack(MP3_MerryChristmas, true, TRAIN_VOLUME); // Play track 12 and wait for completion
+
+  QueueTrack(MP3_MerryChristmas, false, TRAIN_VOLUME); // Play track 12 and wait for completion
+  // flash lights while Santa is talking
+  const uint8_t FLASH_COUNT = 6;
+  const uint16_t FLASH_DELAY_MS = 300;
+  FastLED.setBrightness(128); // 0..255 (128 ~ 50%)
+  for(uint8_t f=0; f<FLASH_COUNT; f++) {
+    //fill_solid(leds, NUM_LEDS, CRGB::White);
+    fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB(100,100,100)); // same LED array for simplicity
+    FastLED.show();
+    delay(FLASH_DELAY_MS);
+    //fill_solid(leds, NUM_LEDS, CRGB::Black);
+    fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black); // same LED array for simplicity
+    FastLED.show();
+    delay(FLASH_DELAY_MS);
+  }
+  while(digitalRead(BUSY_PIN)==HIGH) {
+    delay(100); // wait for playback to start
+  }
+
 }
 
-const int SantaStopPosition = 600; // position index to trigger Santa stop
+const int SantaStopPosition = 700; // position index to trigger Santa stop
 
 void loop() {
   constexpr uint16_t END_OF_LINE_INDEX = NUM_LEDS-2; // position before looping back to start
@@ -203,14 +222,14 @@ void loop() {
  
   // Clear all LEDs 
   fill_solid(leds, NUM_LEDS, CRGB::Black);
-  fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black); // same LED array for simplicity
+  //fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black); // same LED array for simplicity
 
   // Simple train: one white headlight ahead + multi-LED red locomotive + trailing cars
   const uint8_t LOCO_REDS = 5; // number of red LEDs for the locomotive body
   // white headlight ahead (wraps circularly)
   leds[(i + 1) % NUM_LEDS] = CRGB(150, 150, 150);
   
-  ledsHouse[(i + 1) % NUM_HOUSE_LEDS] = CRGB(150, 150, 150);
+  ledsHouse[(i + 1) % NUM_HOUSE_LEDS] = CRGB(i%255, 255-i%255, i%128); // simple moving color pattern for house strip
   
 
   // Draw locomotive body as LOCO_REDS red LEDs behind the headlight (wrap indices)
@@ -258,7 +277,7 @@ void loop() {
     Serial.println("________________________________________________________________");
     Serial.print(F("End of line reached, route count: "));
     Serial.println(++routeCounter);
-    QueueTrack(11, true, currentVolume); // Play track 11 at end of loop
+    //QueueTrack(11, true, currentVolume); // Play track 11 at end of loop
     QueueTrack(7, true, currentVolume,5000);  // Play whistle sound
     QueueTrack(10, true, currentVolume); // Play at end of loop
   }
