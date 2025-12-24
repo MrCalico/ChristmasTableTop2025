@@ -116,7 +116,8 @@ void setup() {
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.addLeds<WS2812, LED_HOUSE_PIN, GRB>(ledsHouse, NUM_HOUSE_LEDS); // same LED array for simplicity
-
+  FastLED.setBrightness(255); // 0..255 (128 ~ 50%)
+  
   // Initialize DFPlayer Mini
   ExtSerial.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN ); // Initialize Serial for debug output
 
@@ -153,23 +154,32 @@ void SantaStop() {
   Serial.println(F("Santa Stop Triggered!"));
 
   QueueTrack(MP3_MerryChristmas, false, TRAIN_VOLUME); // Play track 12 and wait for completion
-  // flash lights while Santa is talking
-  const uint8_t FLASH_COUNT = 6;
-  const uint16_t FLASH_DELAY_MS = 300;
+  
+  // Chase lights from ends to middle while Santa is talking
   FastLED.setBrightness(128); // 0..255 (128 ~ 50%)
-  for(uint8_t f=0; f<FLASH_COUNT; f++) {
-    //fill_solid(leds, NUM_LEDS, CRGB::White);
-    fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB(100,100,100)); // same LED array for simplicity
+  
+  int step = 0;
+  const int maxSteps = (NUM_HOUSE_LEDS + 1) / 2;
+
+  while(digitalRead(BUSY_PIN) == LOW) {
+    fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black);
+    
+    // Light up pixels from both ends moving inward
+    ledsHouse[step] = CRGB(100, 100, 100);
+    ledsHouse[NUM_HOUSE_LEDS - 1 - step] = CRGB(100, 100, 100);
+    
     FastLED.show();
-    delay(FLASH_DELAY_MS);
-    //fill_solid(leds, NUM_LEDS, CRGB::Black);
-    fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black); // same LED array for simplicity
-    FastLED.show();
-    delay(FLASH_DELAY_MS);
+    delay(150);
+    
+    step++;
+    if(step >= maxSteps) {
+      step = 0;
+    }
   }
-  while(digitalRead(BUSY_PIN)==HIGH) {
-    delay(100); // wait for playback to start
-  }
+  
+  fill_solid(ledsHouse, NUM_HOUSE_LEDS, CRGB::Black);
+  FastLED.show();
+  FastLED.setBrightness(255); // 0..255 (128 ~ 50%)
 
 }
 
@@ -229,8 +239,11 @@ void loop() {
   // white headlight ahead (wraps circularly)
   leds[(i + 1) % NUM_LEDS] = CRGB(150, 150, 150);
   
-  ledsHouse[(i + 1) % NUM_HOUSE_LEDS] = CRGB(i%255, 255-i%255, i%128); // simple moving color pattern for house strip
-  
+  if(i%2==0) { 
+    ledsHouse[(i + 1) % NUM_HOUSE_LEDS] = CRGB(i%255/2, 255-i%255/2, i%128/2);  // simple moving color pattern for house strip
+  } else {
+    ledsHouse[(i + 1) % NUM_HOUSE_LEDS] = CRGB(255-i%255/2, i%255/2, 128-i%128/2);  // simple moving color pattern for house strip
+  }
 
   // Draw locomotive body as LOCO_REDS red LEDs behind the headlight (wrap indices)
   for (uint8_t r = 0; r < LOCO_REDS; r++) {
@@ -289,4 +302,3 @@ void loop() {
     Serial.println(i);
   }
 }
-
